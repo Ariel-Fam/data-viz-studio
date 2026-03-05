@@ -34,7 +34,7 @@ export function Layout({ children }: LayoutProps) {
   const { isSignedIn } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <TooltipProvider delayDuration={200}>
