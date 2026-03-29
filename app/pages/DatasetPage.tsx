@@ -26,6 +26,7 @@ import { DataTableComponent } from '../components/DataTableComponent';
 import { DataProfiler } from '../components/DataProfiler';
 import { InsightPanel } from '../components/InsightPanel';
 import { recommendCharts } from '../utils/chartRecommender';
+import type { ChartType } from '../types';
 
 export function DatasetPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -52,8 +53,22 @@ export function DatasetPage() {
   const catCols = dataset.columns.filter(c => ['category', 'text'].includes(c.type)).length;
   const dateCols = dataset.columns.filter(c => c.type === 'date').length;
 
+  const getDefaultDisplayControls = (chartType: ChartType) => {
+    switch (chartType) {
+      case 'radar':
+        return { maxDataPoints: 10, maxXAxisTicks: 8 };
+      case 'line':
+      case 'area':
+        return { maxDataPoints: 40, maxXAxisTicks: 10 };
+      case 'bar':
+      default:
+        return { maxDataPoints: 20, maxXAxisTicks: 8 };
+    }
+  };
+
   const createChart = (recIdx: number) => {
     const rec = recommendations[recIdx];
+    const displayDefaults = getDefaultDisplayControls(rec.type);
     const chartId = addChart({
       datasetId: dataset.id,
       name: rec.title,
@@ -71,6 +86,10 @@ export function DatasetPage() {
       stacked: false,
       colorPalette: 'default',
       numberFormat: 'number',
+      timeFrame: 'none',
+      dateRangeStart: undefined,
+      dateRangeEnd: undefined,
+      ...displayDefaults,
     });
     router.push(`/charts/${chartId}`);
   };
@@ -78,6 +97,7 @@ export function DatasetPage() {
   const createBlankChart = () => {
     const firstNum = dataset.columns.find(c => ['number', 'currency', 'percentage'].includes(c.type));
     const firstCat = dataset.columns.find(c => ['category', 'text', 'date'].includes(c.type));
+    const displayDefaults = getDefaultDisplayControls('bar');
     const chartId = addChart({
       datasetId: dataset.id,
       name: `${dataset.name} — Chart`,
@@ -95,6 +115,10 @@ export function DatasetPage() {
       stacked: false,
       colorPalette: 'default',
       numberFormat: 'number',
+      timeFrame: 'none',
+      dateRangeStart: undefined,
+      dateRangeEnd: undefined,
+      ...displayDefaults,
     });
     router.push(`/charts/${chartId}`);
   };

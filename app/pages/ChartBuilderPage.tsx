@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
 import {
   ArrowLeft, Save, RotateCcw, Download,
-  BarChart2, BarChart3, TrendingUp, PieChart, Circle, Radar, GitBranch,
-  Activity, Layers, Info, ChevronDown, ChevronUp, Lightbulb,
+  BarChart3, TrendingUp, Radar,
+  Activity, Info, ChevronDown, ChevronUp, Lightbulb,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Switch } from '../components/ui/switch';
+import { Slider } from '../components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
@@ -19,7 +21,7 @@ import { ScrollArea } from '../components/ui/scroll-area';
 import { useAppStore } from '../store/AppContext';
 import { ChartRenderer } from '../components/ChartRenderer';
 import { InsightPanel } from '../components/InsightPanel';
-import { COLOR_PALETTES, type ChartType, type AggregationType, type NumberFormat, type ChartConfig } from '../types';
+import { COLOR_PALETTES, type ChartType, type AggregationType, type NumberFormat, type ChartConfig, type TimeFrameOption } from '../types';
 import { generateInsights } from '../utils/stats';
 import { toast } from 'sonner';
 
@@ -28,12 +30,7 @@ const CHART_TYPES: { type: ChartType; label: string; icon: React.FC<{ className?
   { type: 'bar', label: 'Bar', icon: BarChart3 },
   { type: 'line', label: 'Line', icon: TrendingUp },
   { type: 'area', label: 'Area', icon: Activity },
-  { type: 'pie', label: 'Pie', icon: PieChart },
-  { type: 'donut', label: 'Donut', icon: Circle },
-  { type: 'scatter', label: 'Scatter', icon: GitBranch },
   { type: 'radar', label: 'Radar', icon: Radar },
-  { type: 'histogram', label: 'Histogram', icon: BarChart2 },
-  { type: 'composed', label: 'Combo', icon: Layers },
 ];
 
 const AGGREGATIONS: { value: AggregationType; label: string }[] = [
@@ -51,6 +48,49 @@ const NUMBER_FORMATS: { value: NumberFormat; label: string }[] = [
   { value: 'percentage', label: 'Percentage (%)' },
   { value: 'compact', label: 'Compact (1.2K)' },
 ];
+
+const TIME_FRAME_OPTIONS: { value: TimeFrameOption; label: string }[] = [
+  { value: 'none', label: 'No grouping' },
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'quarter', label: 'Quarter' },
+  { value: 'year', label: 'Year' },
+];
+
+const MAX_DATA_POINT_DEFAULTS: Partial<Record<ChartType, number>> = {
+  bar: 20,
+  line: 40,
+  area: 40,
+  radar: 10,
+};
+
+function getDefaultMaxDataPoints(chartType: ChartType): number {
+  return MAX_DATA_POINT_DEFAULTS[chartType] ?? 24;
+}
+
+function getDefaultMaxXAxisTicks(chartType: ChartType): number {
+  return chartType === 'line' || chartType === 'area'
+    ? 10
+    : 8;
+}
+
+function getDisplayDefaults(chartType: ChartType): Pick<ChartConfig, 'maxDataPoints' | 'maxXAxisTicks'> {
+  return {
+    maxDataPoints: getDefaultMaxDataPoints(chartType),
+    maxXAxisTicks: getDefaultMaxXAxisTicks(chartType),
+  };
+}
+
+function parseDateValue(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const iso = parseISO(raw);
+  if (!Number.isNaN(iso.getTime())) return iso;
+  const fallback = new Date(raw);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
 
 // ── Collapsible section ────────────────────────────────────────────────────────
 function Section({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -140,6 +180,40 @@ export function ChartBuilderPage() {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   }, [config]);
 
+  const numericCols = (dataset?.columns ?? [])
+    .filter(c => ['number', 'currency', 'percentage'].includes(c.type))
+    .map(c => c.name);
+  const allCols = (dataset?.columns ?? []).map(c => c.name);
+  const dateCols = (dataset?.columns ?? []).filter(c => c.type === 'date').map(c => c.name);
+  const selectedXAxisIsDate = !!config && dateCols.includes(config.xAxis);
+  const dateBounds = useMemo(() => {
+    if (!dataset || !config || !selectedXAxisIsDate) return null;
+    const dates = dataset.rows
+      .map(row => parseDateValue(row[config.xAxis]))
+      .filter((date): date is Date => date !== null)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (dates.length === 0) return null;
+
+    return {
+      min: format(dates[0], 'yyyy-MM-dd'),
+      max: format(dates[dates.length - 1], 'yyyy-MM-dd'),
+    };
+  }, [config, dataset, selectedXAxisIsDate]);
+  const supportsMaxDataPoints = !!config;
+  const supportsXAxisTickLimit = config
+    ? ['bar', 'line', 'area'].includes(config.chartType)
+    : false;
+  const resolvedMaxDataPoints = config ? (config.maxDataPoints ?? getDefaultMaxDataPoints(config.chartType)) : 24;
+  const maxAvailableDisplayItems = config
+    ? Math.max(
+        resolvedMaxDataPoints,
+        dataset?.rows.length ?? resolvedMaxDataPoints,
+        3,
+      )
+    : 24;
+  const resolvedMaxXAxisTicks = config ? (config.maxXAxisTicks ?? getDefaultMaxXAxisTicks(config.chartType)) : 8;
+
   // Early return after all hooks
   if (!chart || !dataset || !config) {
     return (
@@ -150,9 +224,6 @@ export function ChartBuilderPage() {
       </div>
     );
   }
-
-  const numericCols = dataset.columns.filter(c => ['number', 'currency', 'percentage'].includes(c.type)).map(c => c.name);
-  const allCols = dataset.columns.map(c => c.name);
   const insights = generateInsights(dataset.rows, dataset.columns);
 
   return (
@@ -181,7 +252,7 @@ export function ChartBuilderPage() {
               {CHART_TYPES.map(ct => (
                 <button
                   key={ct.type}
-                  onClick={() => update({ chartType: ct.type })}
+                  onClick={() => update({ chartType: ct.type, ...getDisplayDefaults(ct.type) })}
                   className={`flex flex-col items-center gap-1 rounded-lg p-2 text-xs border transition-colors ${
                     config.chartType === ct.type
                       ? 'bg-primary text-primary-foreground border-primary'
@@ -219,7 +290,18 @@ export function ChartBuilderPage() {
             <div className="space-y-2">
               <div className="space-y-1">
                 <Label className="text-xs">X Axis</Label>
-                <Select value={config.xAxis} onValueChange={v => update({ xAxis: v })}>
+                <Select
+                  value={config.xAxis}
+                  onValueChange={v => {
+                    const nextIsDate = dateCols.includes(v);
+                    update({
+                      xAxis: v,
+                      timeFrame: nextIsDate ? config.timeFrame ?? 'none' : 'none',
+                      dateRangeStart: nextIsDate ? config.dateRangeStart : undefined,
+                      dateRangeEnd: nextIsDate ? config.dateRangeEnd : undefined,
+                    });
+                  }}
+                >
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select column" /></SelectTrigger>
                   <SelectContent>
                     {allCols.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
@@ -247,7 +329,7 @@ export function ChartBuilderPage() {
                       >×</Button>
                     </div>
                   ))}
-                  {numericCols.length > config.yAxis.length && config.chartType !== 'pie' && config.chartType !== 'donut' && (
+                  {numericCols.length > config.yAxis.length && (
                     <Button
                       variant="outline" size="sm" className="w-full h-7 text-xs"
                       onClick={() => {
@@ -267,6 +349,60 @@ export function ChartBuilderPage() {
                     {AGGREGATIONS.map(a => <SelectItem key={a.value} value={a.value} className="text-xs">{a.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Time Frame</Label>
+                <Select
+                  value={selectedXAxisIsDate ? (config.timeFrame ?? 'none') : 'none'}
+                  onValueChange={v => update({ timeFrame: v as TimeFrameOption })}
+                  disabled={!selectedXAxisIsDate}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder={selectedXAxisIsDate ? 'Select grouping' : 'Requires a date X-axis'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIME_FRAME_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value} className="text-xs">
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {selectedXAxisIsDate
+                    ? 'Group date-based charts by day, week, month, quarter, or year.'
+                    : 'Choose a date column as the X-axis to enable time-frame grouping.'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Date Range</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    type="date"
+                    value={selectedXAxisIsDate ? (config.dateRangeStart ?? '') : ''}
+                    min={dateBounds?.min}
+                    max={config.dateRangeEnd || dateBounds?.max}
+                    disabled={!selectedXAxisIsDate}
+                    className="h-8 text-xs"
+                    onChange={e => update({ dateRangeStart: e.target.value || undefined })}
+                  />
+                  <Input
+                    type="date"
+                    value={selectedXAxisIsDate ? (config.dateRangeEnd ?? '') : ''}
+                    min={config.dateRangeStart || dateBounds?.min}
+                    max={dateBounds?.max}
+                    disabled={!selectedXAxisIsDate}
+                    className="h-8 text-xs"
+                    onChange={e => update({ dateRangeEnd: e.target.value || undefined })}
+                  />
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {selectedXAxisIsDate
+                    ? 'Filter the chart to only show data within a specific start and end date.'
+                    : 'Choose a date column as the X-axis to enable date range filtering.'}
+                </p>
               </div>
             </div>
           </Section>
@@ -313,6 +449,68 @@ export function ChartBuilderPage() {
                   />
                 </ConfigRow>
               ))}
+            </div>
+          </Section>
+
+          <Section title="Density & Readability">
+            <div className="space-y-4">
+              {supportsMaxDataPoints && (
+                <div className="space-y-2">
+                  <ConfigRow
+                    label="Show all data"
+                    tooltip="Disable sampling and render every available category or time bucket."
+                  >
+                    <Switch
+                      checked={!!config.showAllData}
+                      onCheckedChange={value => update({ showAllData: value })}
+                      className="scale-90"
+                    />
+                  </ConfigRow>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-xs">Max displayed items</Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      {config.showAllData ? `All (${maxAvailableDisplayItems.toLocaleString()}+)` : resolvedMaxDataPoints.toLocaleString()}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[resolvedMaxDataPoints]}
+                    min={3}
+                    max={maxAvailableDisplayItems}
+                    step={1}
+                    onValueChange={([value]) => update({ maxDataPoints: value })}
+                    disabled={!!config.showAllData}
+                  />
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {config.chartType === 'radar'
+                      ? 'Limits how many categories are drawn around the radar to prevent label collisions.'
+                      : 'Limits how many categories or time buckets are rendered at once to reduce crowding.'}
+                  </p>
+                  {config.showAllData && (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      All available chart data will be rendered until you turn this option off.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {supportsXAxisTickLimit && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-xs">Visible X-axis labels</Label>
+                    <span className="text-[11px] text-muted-foreground">{resolvedMaxXAxisTicks}</span>
+                  </div>
+                  <Slider
+                    value={[resolvedMaxXAxisTicks]}
+                    min={3}
+                    max={16}
+                    step={1}
+                    onValueChange={([value]) => update({ maxXAxisTicks: value })}
+                  />
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Reduces label overlap by showing only the most important X-axis ticks while keeping the full dataset in view.
+                  </p>
+                </div>
+              )}
             </div>
           </Section>
 
@@ -392,12 +590,7 @@ export function ChartBuilderPage() {
                   {config.chartType === 'bar' && 'Bar charts compare discrete categories. Each bar height represents the aggregated value.'}
                   {config.chartType === 'line' && 'Line charts show trends over continuous data — ideal for time series.'}
                   {config.chartType === 'area' && 'Area charts emphasize volume and cumulative changes over time.'}
-                  {config.chartType === 'pie' && 'Pie charts show proportional share of total. Best with 6 or fewer categories.'}
-                  {config.chartType === 'donut' && 'Donut charts show proportional share with a center space for key metrics.'}
-                  {config.chartType === 'scatter' && 'Scatter plots reveal correlations and clusters between two numeric variables.'}
                   {config.chartType === 'radar' && 'Radar charts compare multi-dimensional profiles across categories.'}
-                  {config.chartType === 'histogram' && 'Histograms show the frequency distribution of a numeric variable.'}
-                  {config.chartType === 'composed' && 'Combo charts layer bar and line series to compare related metrics.'}
                 </p>
               </div>
             </div>

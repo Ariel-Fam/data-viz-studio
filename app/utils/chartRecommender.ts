@@ -29,18 +29,6 @@ export function recommendCharts(columns: Column[]): ChartRecommendation[] {
       confidence: 'high',
       icon: '🏔️',
     });
-    if (numCols.length >= 2) {
-      recs.push({
-        type: 'composed',
-        title: 'Combo Chart — Bar + Line',
-        description: `Compare ${numCols[0].name} (bars) with ${numCols[1].name} (line).`,
-        reason: 'Combo charts show two related metrics together, ideal for volume vs. rate comparison.',
-        xAxis: dateCols[0].name,
-        yAxis: numCols.slice(0, 2).map(c => c.name),
-        confidence: 'medium',
-        icon: '📊',
-      });
-    }
   }
 
   // Category + numeric → bar chart
@@ -55,18 +43,6 @@ export function recommendCharts(columns: Column[]): ChartRecommendation[] {
       confidence: 'high',
       icon: '📊',
     });
-
-    recs.push({
-      type: 'pie',
-      title: 'Pie / Donut Chart — Proportions',
-      description: `Show how ${numCols[0].name} is distributed across ${catCols[0].name}.`,
-      reason: 'Pie charts reveal share-of-total when there are a manageable number of categories.',
-      xAxis: catCols[0].name,
-      yAxis: [numCols[0].name],
-      confidence: 'medium',
-      icon: '🥧',
-    });
-
     if (numCols.length >= 2) {
       recs.push({
         type: 'bar',
@@ -81,20 +57,6 @@ export function recommendCharts(columns: Column[]): ChartRecommendation[] {
     }
   }
 
-  // Two numeric → scatter plot
-  if (numCols.length >= 2) {
-    recs.push({
-      type: 'scatter',
-      title: 'Scatter Plot — Correlation',
-      description: `Explore the relationship between ${numCols[0].name} and ${numCols[1].name}.`,
-      reason: 'Scatter plots reveal correlations, clusters, and outliers between two numeric variables.',
-      xAxis: numCols[0].name,
-      yAxis: [numCols[1].name],
-      confidence: 'high',
-      icon: '🔵',
-    });
-  }
-
   // Multiple numeric → radar
   if (numCols.length >= 3) {
     recs.push({
@@ -106,20 +68,6 @@ export function recommendCharts(columns: Column[]): ChartRecommendation[] {
       yAxis: numCols.slice(0, 5).map(c => c.name),
       confidence: 'medium',
       icon: '🕸️',
-    });
-  }
-
-  // Single numeric → histogram
-  if (numCols.length >= 1) {
-    recs.push({
-      type: 'histogram',
-      title: 'Histogram — Distribution',
-      description: `See how values in ${numCols[0].name} are distributed.`,
-      reason: 'Histograms show the frequency distribution, revealing skewness and outliers.',
-      xAxis: numCols[0].name,
-      yAxis: [numCols[0].name],
-      confidence: 'medium',
-      icon: '📶',
     });
   }
 

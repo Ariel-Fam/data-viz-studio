@@ -35,7 +35,7 @@ const FEATURES = [
   {
     icon: BarChart3,
     title: 'Interactive Chart Builder',
-    description: 'Drag-and-drop chart configuration with 9+ chart types, custom palettes, and export.',
+    description: 'Build bar, line, area, and radar charts with display controls, custom palettes, and export.',
     color: 'text-emerald-500',
     bg: 'bg-emerald-500/10',
   },
@@ -70,7 +70,7 @@ const FEATURES = [
 ];
 
 const CHART_TYPES = [
-  'Bar', 'Line', 'Area', 'Pie/Donut', 'Scatter', 'Radar', 'Histogram', 'Combo', 'Stacked'
+  'Bar', 'Line', 'Area', 'Radar', 'Stacked'
 ];
 
 export function LandingPage() {

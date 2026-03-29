@@ -1,4 +1,5 @@
 import type { Row, Column, ColumnStats, Insight, ColumnType } from '../types';
+import { format, parseISO, startOfMonth, startOfQuarter, startOfWeek, startOfYear } from 'date-fns';
 
 /** Extract numeric values from a column */
 export function getNumericValues(rows: Row[], column: string): number[] {
@@ -236,21 +237,78 @@ export function generateInsights(rows: Row[], columns: Column[]): Insight[] {
 }
 
 /** Aggregate rows by a group column */
+function parseDateValue(value: Row[string]): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const iso = parseISO(raw);
+  if (!Number.isNaN(iso.getTime())) return iso;
+  const fallback = new Date(raw);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function groupDateKey(value: Row[string], timeFrame: import('../types').TimeFrameOption): string {
+  const date = parseDateValue(value);
+  if (!date || timeFrame === 'none') return String(value ?? '(empty)');
+
+  switch (timeFrame) {
+    case 'day':
+      return format(date, 'MMM d, yyyy');
+    case 'week':
+      return `Week of ${format(startOfWeek(date), 'MMM d, yyyy')}`;
+    case 'month':
+      return format(startOfMonth(date), 'MMM yyyy');
+    case 'quarter':
+      return format(startOfQuarter(date), 'QQQ yyyy');
+    case 'year':
+      return format(startOfYear(date), 'yyyy');
+    default:
+      return String(value ?? '(empty)');
+  }
+}
+
+function groupDateSortValue(value: Row[string], timeFrame: import('../types').TimeFrameOption): number | null {
+  const date = parseDateValue(value);
+  if (!date || timeFrame === 'none') return null;
+
+  switch (timeFrame) {
+    case 'day':
+      return date.getTime();
+    case 'week':
+      return startOfWeek(date).getTime();
+    case 'month':
+      return startOfMonth(date).getTime();
+    case 'quarter':
+      return startOfQuarter(date).getTime();
+    case 'year':
+      return startOfYear(date).getTime();
+    default:
+      return null;
+  }
+}
+
 export function aggregateData(
   rows: Row[],
   xField: string,
   yFields: string[],
-  agg: string
+  agg: string,
+  timeFrame: import('../types').TimeFrameOption = 'none',
 ): Row[] {
   const groups = new Map<string, Row[]>();
   rows.forEach(row => {
-    const key = String(row[xField] ?? '(empty)');
+    const key = timeFrame === 'none'
+      ? String(row[xField] ?? '(empty)')
+      : groupDateKey(row[xField], timeFrame);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(row);
   });
 
   return Array.from(groups.entries()).map(([key, groupRows]) => {
     const result: Row = { [xField]: key };
+    if (timeFrame !== 'none') {
+      const sortValue = groupDateSortValue(groupRows[0]?.[xField] ?? null, timeFrame);
+      if (sortValue !== null) result.__sortValue = sortValue;
+    }
     yFields.forEach(field => {
       const nums = getNumericValues(groupRows, field);
       if (nums.length === 0) { result[field] = null; return; }

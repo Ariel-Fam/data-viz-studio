@@ -20,11 +20,13 @@ export interface Dataset {
   source: 'manual' | 'csv' | 'json' | 'sample';
 }
 
-export type ChartType = 'bar' | 'line' | 'area' | 'pie' | 'donut' | 'scatter' | 'radar' | 'histogram' | 'composed';
+export type ChartType = 'bar' | 'line' | 'area' | 'radar';
 
 export type AggregationType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'median';
 
 export type NumberFormat = 'number' | 'percentage' | 'currency' | 'compact';
+
+export type TimeFrameOption = 'none' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -55,6 +57,12 @@ export interface ChartConfig {
   stacked: boolean;
   colorPalette: string;
   numberFormat: NumberFormat;
+  timeFrame: TimeFrameOption;
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
+  showAllData?: boolean;
+  maxDataPoints?: number;
+  maxXAxisTicks?: number;
   createdAt: string;
 }
 

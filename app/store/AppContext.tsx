@@ -6,6 +6,23 @@ import { generateId } from '../utils/formatters';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 
+const SUPPORTED_CHART_TYPES = new Set<ChartConfig['chartType']>(['bar', 'line', 'area', 'radar']);
+
+function sanitizeChartConfig(chart: ChartConfig | (Omit<ChartConfig, 'chartType'> & { chartType: string })): ChartConfig {
+  if (SUPPORTED_CHART_TYPES.has(chart.chartType as ChartConfig['chartType'])) {
+    return chart as ChartConfig;
+  }
+
+  const fallbackType = chart.chartType === 'scatter' || chart.chartType === 'composed' ? 'line' : 'bar';
+
+  return {
+    ...chart,
+    chartType: fallbackType,
+    maxDataPoints: chart.maxDataPoints ?? (fallbackType === 'radar' ? 10 : fallbackType === 'bar' ? 20 : 40),
+    maxXAxisTicks: chart.maxXAxisTicks ?? (fallbackType === 'bar' ? 8 : 10),
+  };
+}
+
 // ── State shape ────────────────────────────────────────────────────────────────
 interface AppState {
   datasets: Dataset[];
@@ -69,7 +86,7 @@ function loadState(): Partial<AppState> {
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Partial<AppState>;
     return {
-      charts: parsed.charts ?? [],
+      charts: (parsed.charts ?? []).map(chart => sanitizeChartConfig(chart)),
       theme: parsed.theme ?? 'light',
     };
   } catch {
@@ -188,13 +205,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const id = generateId();
     dispatch({
       type: 'ADD_CHART',
-      payload: { ...chart, id, createdAt: new Date().toISOString() },
+      payload: sanitizeChartConfig({ ...chart, id, createdAt: new Date().toISOString() }),
     });
     return id;
   }, []);
 
   const updateChart = useCallback((chart: ChartConfig) => {
-    dispatch({ type: 'UPDATE_CHART', payload: chart });
+    dispatch({ type: 'UPDATE_CHART', payload: sanitizeChartConfig(chart) });
   }, []);
 
   const removeChart = useCallback((id: string) => {
