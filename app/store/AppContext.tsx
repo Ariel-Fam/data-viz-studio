@@ -18,7 +18,7 @@ function sanitizeChartConfig(chart: ChartConfig | (Omit<ChartConfig, 'chartType'
   return {
     ...chart,
     chartType: fallbackType,
-    maxDataPoints: chart.maxDataPoints ?? (fallbackType === 'radar' ? 10 : fallbackType === 'bar' ? 20 : 40),
+    maxDataPoints: chart.maxDataPoints ?? (fallbackType === 'bar' ? 20 : 40),
     maxXAxisTicks: chart.maxXAxisTicks ?? (fallbackType === 'bar' ? 8 : 10),
   };
 }
